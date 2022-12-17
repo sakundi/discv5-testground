@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rules: None,
             callback_state: STATE_NETWORK_CONFIGURED.to_owned(),
             callback_target: None,
-            routing_policy: RoutingPolicyType::DenyAll,
+            routing_policy: RoutingPolicyType::AllowAll,
         })
         .await?;
 

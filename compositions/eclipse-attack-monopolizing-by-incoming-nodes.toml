@@ -19,7 +19,7 @@ id = "victim"
     # This parameter sets a maximum limit to the number of incoming nodes per bucket. If you comment out this parameter,
     # the victim node emits "Table full" error since the victim's routing bucket is full of the "incoming" attacker node
     # ids.
-    incoming_bucket_limit = "8"
+    # incoming_bucket_limit = "8"
 
 [[groups]]
 id = "honest"
