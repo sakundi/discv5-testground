@@ -5,13 +5,9 @@ use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{enr, Discv5, Discv5ConfigBuilder, Enr};
 use discv5::Key;
 use serde::{Deserialize, Serialize};
-use std::net::{SocketAddr, Ipv4Addr, IpAddr};
-use ipnetwork::Ipv4Network;
+use std::net::SocketAddr;
 use std::u64;
 use testground::client::Client;
-use testground::network_conf::{
-    FilterAction, LinkShape, NetworkConfiguration, RoutingPolicyType, DEFAULT_DATA_NETWORK,
-};
 use tokio::task;
 use tracing::debug;
 
@@ -246,55 +242,14 @@ impl MonopolizingByIncomingNodes {
         // the FINDNODE query will be sent to the victim, and then, if the victim is vulnerable
         // to the eclipse attack, the attacker's ENR will be added to the victim's routing table
         // because of the handshake.
-        let mut network_configuration = NetworkConfiguration {
-            network: DEFAULT_DATA_NETWORK.to_owned(),
-            ipv4: None,
-            ipv6: None,
-            enable: true,
-            default: LinkShape {
-                latency: client
-                    .run_parameters()
-                    .test_instance_params
-                    .get("latency")
-                    .ok_or("latency is not specified")?
-                    .parse::<u64>()?
-                    * 1_000_000, // Translate from millisecond to nanosecond
-                jitter: 0,
-                bandwidth: 1048576, // 1Mib
-                filter: FilterAction::Accept,
-                loss: 0.0,
-                corrupt: 0.0,
-                corrupt_corr: 0.0,
-                reorder: 0.0,
-                reorder_corr: 0.0,
-                duplicate: 0.0,
-                duplicate_corr: 0.0,
-            },
-            rules: None,
-            callback_state: STATE_NETWORK_CONFIGURED.to_owned(),
-            callback_target: None,
-            routing_policy: RoutingPolicyType::AllowAll,
-        };
         let tikuna_base64 = "enr:-MK4QCCu7HxGVTUVE3Mfx-_78yUybuRJTeiEsesNCom-bqRYT4S7Cz0HgLvgAGbQWgawMysPw2UafLAr3JAHSkBIsreGAYTznvm2h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhI6E_nuJc2VjcDI1NmsxoQJ5FMa1v-bvvmnCAfxI57O4cgUZ7J83clFIWpY8Vx4IzYhzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
-        let current_ipaddr = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
-        match current_ipaddr {
-            IpAddr::V4(ipv4) => {
-                                 let ip_vec: [u8; 4] = ipv4.octets();
-                                 network_configuration.ipv4 = Some(Ipv4Network::new(
-                                     Ipv4Addr::new(ip_vec[0], ip_vec[1], client.group_seq() as u8, ip_vec[3]), 24)
-                                         .unwrap()
-                                     );
-                                 }
-            IpAddr::V6(_ipv6) => { (); }
-        }
-        client.configure_network(network_configuration).await?;
         client.record_message("Generating keys!!");
         let eclipse_keypairs = generate_keys_fill_buckets(&tikuna_enr, 5, 2);
         client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.await.len()));
-        discv5.add_enr(tikuna_enr.clone())?;
         let current_ip_address = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
         client.record_message(format!("Current IP address: {:?}", current_ip_address));
+        discv5.add_enr(tikuna_enr.clone())?;
         if let Err(e) = discv5.find_node(NodeId::random()).await {
             client.record_message(format!("Failed to run query: {}", e));
         }
