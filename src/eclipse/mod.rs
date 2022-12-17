@@ -11,7 +11,6 @@ use testground::client::Client;
 use tokio::task;
 use tracing::debug;
 
-const STATE_NETWORK_CONFIGURED: &str = "state_network_configured";
 const STATE_COMPLETED_TO_COLLECT_INSTANCE_INFORMATION: &str =
     "STATE_COMPLETED_TO_COLLECT_INSTANCE_INFORMATION";
 const STATE_ATTACKERS_SENT_QUERY: &str = "STATE_ATTACKERS_SENT_QUERY";
