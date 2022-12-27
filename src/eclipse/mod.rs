@@ -10,6 +10,7 @@ use std::u64;
 use testground::client::Client;
 use tokio::task;
 use tracing::debug;
+use surge_ping::IcmpPacket;
 
 const STATE_COMPLETED_TO_COLLECT_INSTANCE_INFORMATION: &str =
     "STATE_COMPLETED_TO_COLLECT_INSTANCE_INFORMATION";
@@ -65,8 +66,8 @@ impl MonopolizingByIncomingNodes {
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
         client.record_message("Generating keys!!");
         let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_keys_fill_buckets(&tikuna_enr, 1, 1).await;
+	client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.len()));
         let enr_key = eclipse_keypairs.remove(0);
-        client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.len()));
         let enr = EnrBuilder::new("v4")
             .ip(run_parameters
                 .data_network_ip()?
@@ -199,7 +200,7 @@ impl MonopolizingByIncomingNodes {
             }
         }
 
-        assert!(victim.len() == 1 && honest.len() == 1 && attackers.len() == 18);
+        assert!(victim.len() == 1 && honest.len() == 1 && attackers.len() == 48);
 
         Ok((victim.remove(0), honest.remove(0), attackers))
     }
@@ -272,7 +273,8 @@ impl MonopolizingByIncomingNodes {
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
         let current_ip_address = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
         client.record_message(format!("Current IP address: {:?}", current_ip_address));
-        client.record_message(format!("Attacking!!");
+        client.record_message("Attacking!!");
+        // ping(&client).await;
         discv5.add_enr(tikuna_enr.clone())?;
         if let Err(e) = discv5.find_node(NodeId::random()).await {
             client.record_message(format!("Failed to run query: {}", e));
@@ -311,4 +313,21 @@ fn generate_deterministic_keypair(n: usize, seed: u64) -> Vec<CombinedKey> {
         keypairs.push(kp);
     }
     keypairs
+}
+
+async fn ping(client: &Client) {
+    let payload = [0; 8];
+    match surge_ping::ping("142.132.254.123".parse().unwrap(), &payload).await {
+        Ok((IcmpPacket::V4(packet), duration)) => {
+            client.record_message(format!(
+                "{} bytes from {}: icmp_seq={} ttl={:?} time={:.2?}",
+                packet.get_size(),
+                packet.get_source(),
+                packet.get_sequence(),
+                packet.get_ttl(),
+                duration
+            ));
+        },
+        _ => client.record_message(format!("Error in ping!")),
+    };
 }
