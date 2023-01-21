@@ -13,7 +13,7 @@ disable_metrics = false
 [[groups]]
 id = "victim"
   [groups.instances]
-  count = 1
+  count = 0
   [groups.run]
     [groups.run.test_params]
     # This parameter sets a maximum limit to the number of incoming nodes per bucket. If you comment out this parameter,
@@ -24,13 +24,13 @@ id = "victim"
 [[groups]]
 id = "honest"
   [groups.instances]
-  count = 1
+  count = 0
   [groups.run]
     [groups.run.test_params]
 
 [[groups]]
 id = "attackers"
   [groups.instances]
-  count = 98
+  count = 100
   [groups.run]
     [groups.run.test_params]

