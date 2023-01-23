@@ -4,7 +4,7 @@ echo "Cleaning docker..."
 docker ps --all | grep Exited  | gawk '{print $1}' | xargs docker rm -f
 docker ps --all | grep Created | gawk '{print $1}' | xargs docker rm -f
 echo "Starting testground..."
-nohup testground daemon &
+nohup /home/tikuna/go/bin/testground daemon &
 echo "Starting attack!..."
-# testground run composition -f compositions/eclipse-attack-monopolizing-by-incoming-nodes.toml
+/home/tikuna/go/bin/testground run composition -f compositions/eclipse-attack-monopolizing-by-incoming-nodes.toml
 echo "Attack started!"
