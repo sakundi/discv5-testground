@@ -5,7 +5,7 @@ author = "Akihito Nakano"
 [global]
 plan = "discv5-testground"
 case = "eclipse-attack-monopolizing-by-incoming-nodes"
-total_instances = 100
+total_instances = 200
 builder = "docker:generic"
 runner = "local:docker"
 disable_metrics = false
@@ -31,6 +31,6 @@ id = "honest"
 [[groups]]
 id = "attackers"
   [groups.instances]
-  count = 100
+  count = 200
   [groups.run]
     [groups.run.test_params]
