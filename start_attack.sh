@@ -1,4 +1,4 @@
-!/bin/bash
+#!/bin/bash
 
 echo "Cleaning docker..."
 docker ps --all | grep Exited | gawk '{print $1}' | xargs sudo docker rm -f
