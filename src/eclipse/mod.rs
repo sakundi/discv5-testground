@@ -18,6 +18,7 @@ const STATE_COMPLETED_TO_COLLECT_INSTANCE_INFORMATION: &str =
     "STATE_COMPLETED_TO_COLLECT_INSTANCE_INFORMATION";
 const STATE_ATTACKERS_SENT_QUERY: &str = "STATE_ATTACKERS_SENT_QUERY";
 const STATE_DONE: &str = "STATE_DONE";
+const VICTIM_ENR_BASE64: &str = "";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum Role {
@@ -42,9 +43,6 @@ struct InstanceInfo {
 pub(super) struct MonopolizingByIncomingNodes {}
 
 impl MonopolizingByIncomingNodes {
-
-    let victim_enr_base64 = "";
-
     pub(super) fn new() -> Self {
         MonopolizingByIncomingNodes {}
     }
@@ -63,7 +61,7 @@ impl MonopolizingByIncomingNodes {
         // Construct a local Enr
         // ////////////////////////
         // let enr_key = Self::generate_deterministic_keypair(client.group_seq(), &role);
-        let victim_enr: Enr = Self::victim_enr_base64.parse().unwrap();
+        let victim_enr: Enr = VICTIM_ENR_BASE64.parse().unwrap();
         client.record_message("Generating keys!!");
         let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_single_key_fill_buckets(&victim_enr, client.group_seq() % 13).await;
 	client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.len()));
@@ -195,7 +193,7 @@ impl MonopolizingByIncomingNodes {
         // the FINDNODE query will be sent to the victim, and then, if the victim is vulnerable
         // to the eclipse attack, the attacker's ENR will be added to the victim's routing table
         // because of the handshake.
-        let victim_enr: Enr = Self::victim_enr_base64.parse().unwrap();
+        let victim_enr: Enr = VICTIM_ENR_BASE64.parse().unwrap();
         let current_ip_address = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
         client.record_message(format!("Current IP address: {:?}", current_ip_address));
         client.record_message("Attacking!!");
